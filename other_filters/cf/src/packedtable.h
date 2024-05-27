@@ -426,15 +426,17 @@ class PackedTable {
     return false;
   }
 
-  // inline size_t NumTagsInBucket(const size_t i) {
-  //     size_t num = 0;
-  //     for (size_t j = 0; j < tags_per_bucket; j++ ){
-  //         if (ReadTag(i, j) != 0) {
-  //             num ++;
-  //         }
-  //     }
-  //     return num;
-  // } // NumTagsInBucket
+#if 0
+   inline size_t NumTagsInBucket(const size_t i) {
+    size_t num = 0;
+    for (size_t j = 0; j < tags_per_bucket; j++) {
+      if (ReadTag(i, j) != 0) {
+        num++;
+      }
+    }
+    return num;
+  }  // NumTagsInBucket
+#endif
 
 };  // PackedTable
 }  // namespace cuckoofilter
