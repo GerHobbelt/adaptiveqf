@@ -73,102 +73,8 @@ double rand_zipfian(double s, double max) {
 	}
 }
 
-#define HASH_SET_SEED 26571997
 
-struct _set_node {
-        struct _set_node *next;
-        uint64_t key;
-	uint64_t rem;
-	int len;
-} typedef set_node;
-
-int set_insert(set_node *set, int set_len, set_node *new_node) {
-        uint64_t hash = MurmurHash64A((void*)(&(new_node->key)), sizeof(new_node->key), HASH_SET_SEED);
-        set_node *ptr = &set[hash % set_len];
-        if (!ptr->key) {
-                ptr->key = new_node->key;
-        } else {
-                while (ptr->next) {
-                        if (ptr->key == new_node->key) {
-                                return 0;
-                        }
-                        ptr = ptr->next;
-                }
-                if (ptr->key == new_node->key) {
-                        return 0;
-                }
-                ptr->next = new_node;
-        }
-        return 1;
-}
-
-int set_query(set_node *set, int set_len, uint64_t key) {
-        uint64_t hash = MurmurHash64A((void*)(&key), sizeof(key), HASH_SET_SEED);
-        set_node *ptr = &set[hash % set_len];
-        if (!ptr->key) {
-                return 0;
-        } else {
-                while (ptr->next){
-                        if (ptr->key == key) {
-                                return 1;
-                        }
-                        ptr = ptr->next;
-                }
-                if (ptr->key == key){
-                        return 1;
-                } else {
-                        return 0;
-                }
-        }
-}
-
-set_node *set_get(set_node *set, int set_len, set_node *node) {
-        uint64_t hash = MurmurHash64A((void*)(&(node->key)), sizeof(node->key), HASH_SET_SEED);
-        set_node *ptr = &set[hash % set_len];
-        if (!ptr->key) {
-                return NULL;
-        } else {
-                while (ptr->next){
-                        if (ptr->key == node->key) {
-                                return ptr;
-                        }
-                        ptr = ptr->next;
-                }
-                if (ptr->key == node->key){
-                        return ptr;
-                } else {
-                        return NULL;
-                }
-        }
-}
-
-uint64_t hash_str(char *str) {
-	uint64_t hash = 5381;
-	int c;
-	while ((c = *str++)) {
-		hash = ((hash << 5) + hash) + c;
-	}
-	return hash;
-}
-
-void csv_get(char* buffer, int col) {
-	int i, j;
-	for (i = 0; buffer[i] != '\0' && col > 0; i++) {
-		if (buffer[i] == ',') col--;
-	}
-	for (j = 0; buffer[i + j] != '\0' && buffer[i + j] != ','; j++) {
-		buffer[j] = buffer[i + j];
-	}
-	buffer[j] = '\0';
-}
-
-
-typedef struct test_struct {
-	int a;
-	int b;
-} test_struct;
-
-#define USE_UNORDERED_MAP 1
+#define USE_UNORDERED_MAP 0
 #if USE_UNORDERED_MAP
 #define BACKING_MAP_T unordered_map_t
 #define BACKING_MAP_INSERT(X, Y, Z) X.insert(std::make_pair(Y, Z));
@@ -177,7 +83,7 @@ typedef struct test_struct {
 #define BACKING_MAP_INSERT(X, Y, Z) X.insert(pair_t(Y, Z));
 #endif
 
-#define SUB_BLOCK_SIZE 256
+#define SUB_BLOCK_SIZE 8192
 #define SUB_BLOCKS_PER_BLOCK 256
 
 #define DATA_NODE_BLOCK_SIZE (4096)
@@ -203,8 +109,6 @@ struct CompareGreater {
 };
 //! [comparator]
 
-typedef stxxl::map<uint64_t, test_struct, CompareGreater, DATA_NODE_BLOCK_SIZE, DATA_LEAF_BLOCK_SIZE> map_t2;
-
 typedef stxxl::unordered_map<uint64_t, uint64_t, HashFunctor, CompareGreater, SUB_BLOCK_SIZE, SUB_BLOCKS_PER_BLOCK> unordered_map_t;
 typedef stxxl::map<uint64_t, uint64_t, CompareGreater, DATA_NODE_BLOCK_SIZE, DATA_LEAF_BLOCK_SIZE> ordered_map_t;
 typedef std::pair<uint64_t, uint64_t> pair_t;
@@ -220,7 +124,7 @@ int insert_key(QF *qf, BACKING_MAP_T& map, uint64_t key, int count) {
                 return 0;
         }
         else if (ret == 0) {
-		BACKING_MAP_T::iterator item = map.find(ret_hash | (1 << ret_hash_len));
+		BACKING_MAP_T::iterator item = map.find(ret_hash | (1ull << ret_hash_len));
 		map_queries++;
                 if (item == map.end()) {
                         printf("error:\tfilter claimed to have fingerprint %lu but hashtable could not find it\n", ret_hash);
@@ -236,14 +140,14 @@ int insert_key(QF *qf, BACKING_MAP_T& map, uint64_t key, int count) {
                         }
 
 			map.erase(item);
-			BACKING_MAP_INSERT(map, ret_other_hash | (1 << ret_hash_len), item->second);
-			BACKING_MAP_INSERT(map, ret_hash | (1 << ret_hash_len), key);
+			BACKING_MAP_INSERT(map, ret_other_hash | (1ull << ret_hash_len), item->second);
+			BACKING_MAP_INSERT(map, ret_hash | (1ull << ret_hash_len), key);
 			map_inserts++;
 			map_inserts++;
                 }
         }
         else if (ret == 1) {
-		BACKING_MAP_INSERT(map, ret_hash | (1 << ret_hash_len), key);
+		BACKING_MAP_INSERT(map, ret_hash | (1ull << ret_hash_len), key);
 		map_inserts++;
         }
         else {
@@ -256,13 +160,13 @@ int insert_key(QF *qf, BACKING_MAP_T& map, uint64_t key, int count) {
 
 int main(int argc, char **argv)
 {
-	if (argc < 5) {
-		fprintf(stderr, "Please specify \nthe log of the number of slots in the QF [eg. 20]\nthe number of remainder bits in the QF [eg. 9]\nthe number of queries [eg. 1000000]\nthe output file [eg. disk_throughput_stats.txt]\n");
-		// ./test 16 7 $((1 << 15)) 1000000 disk_throughput_stats.txt 0
+	if (argc < 4) {
+		fprintf(stderr, "Please specify \nthe log of the number of slots in the QF\nthe number of remainder bits in the QF\nthe number of churns\n");
+		fprintf(stderr, "./test_ext_churn 16 9 10000 0");
 		exit(1);
 	}
-	if (argc >= 6) {
-		srand(strtol(argv[5], NULL, 10));
+	if (argc >= 5) {
+		srand(strtol(argv[4], NULL, 10));
 		printf("running test on seed %ld\n", strtol(argv[5], NULL, 10));
 	}
 	else {
@@ -282,16 +186,15 @@ int main(int argc, char **argv)
 
 	uint64_t nhashbits = qbits + rbits;
 	uint64_t nslots = (1ULL << qbits);
-	double load_factor = 0.95f;
+	double load_factor = 0.9f;
 	uint64_t num_inserts = nslots * load_factor;//strtoull(argv[3], NULL, 10);
-	uint64_t num_queries = strtoull(argv[3], NULL, 10);
+	uint64_t num_churns = strtoull(argv[3], NULL, 10);
 
 
 	printf("initializing hash table...\n");
 #if USE_UNORDERED_MAP
 	unordered_map_t backing_map;
 	//backing_map.max_buffer_size(SUB_BLOCK_SIZE);
-	unordered_map_t::allocator_type allocator = backing_map.get_allocator();
 #else
 	ordered_map_t backing_map((ordered_map_t::node_block_type::raw_size) * 3, (ordered_map_t::leaf_block_type::raw_size) * 3);
 #endif	
@@ -308,109 +211,68 @@ int main(int argc, char **argv)
 
 
 	printf("generating insert set of size %lu...\n", num_inserts);
-	uint64_t i, j;
+	uint64_t i;
 	uint64_t *insert_set = new uint64_t[num_inserts];
         RAND_bytes((unsigned char*)insert_set, num_inserts * sizeof(uint64_t));
 
 
 	// PERFORM INSERTS
-	uint64_t target_fill = nslots * load_factor;
-	printf("performing insertions... 0/%lu", target_fill);
-	//std::cout << "performing insertions... 0%%" << std::flush;
-	uint64_t ret_index, ret_hash;
+	printf("performing inserts...\n");
+	uint64_t ret_hash;
 	int ret_hash_len;
+
+	uint64_t target_fill = nslots * load_factor;
 
 	double measure_interval = 0.01f;
         double current_interval = measure_interval;
-        uint64_t measure_point = target_fill * current_interval, last_point = 0;
+        uint64_t measure_point = nslots * current_interval, last_point = 0;
 
-	FILE *outfp = fopen(argv[4], "w");
-	fprintf(outfp, "./test_ext_throughput %s %s %s %s\n", argv[1], argv[2], argv[3], argv[4]);
-
+	std::cout << "performing inserts... 0" << '%' << std::flush;
 	clock_t start_time = clock(), end_time, interval_time = start_time;
-	for (i = 0; qf.metadata->noccupied_slots < target_fill; i++) {
+	for (i = 0; qf.metadata->noccupied_slots <= target_fill; i++) {
 		if (!insert_key(&qf, backing_map, insert_set[i], 1)) break;
 		database.insert(pair_t(insert_set[i], i));
-		printf("\rperforming insertions... %lu/%lu          ", qf.metadata->noccupied_slots, target_fill);
 		if (qf.metadata->noccupied_slots >= measure_point) {
-			//std::cout << "\rperforming insertions... " << current_interval * 100 << "%%         " << std::flush;
-			fprintf(outfp, "%f\t%f\n", (double)qf.metadata->noccupied_slots / nslots, (double)(i - last_point) * CLOCKS_PER_SEC / (clock() - interval_time));
+			std::cout << "\rperforming inserts... " << int(current_interval * 100) << '%' << " - " << (double)(i - last_point) * CLOCKS_PER_SEC / (clock() - interval_time) << " ops/sec" << std::flush;
                         current_interval += measure_interval;
                         last_point = i;
                         measure_point = nslots * current_interval;
                         interval_time = clock();
-
-			//backing_map.print_statistics(std::cout);
-			//backing_map.print_load_statistics(std::cout);
                 }
 	}
 	end_time = clock();
-	printf("\rperforming insertions... %lu/%lu          \n", target_fill, target_fill);
-	//std::cout << "\rperforming insertions... 100%%         " << std::endl;
-	fprintf(outfp, "%f\t%f\n", (double)target_fill / nslots, (double)(i - last_point) * CLOCKS_PER_SEC / (end_time - interval_time));
-	fclose(outfp);
 
 	printf("time for inserts:      %f\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
 	printf("avg insert throughput: %f ops/sec\n", (double)i * CLOCKS_PER_SEC / (end_time - start_time));
 
-
-	//backing_map.print_statistics(std::cout);
-	//backing_map.print_load_statistics(std::cout);
-
-	// PERFORM QUERIES
-	printf("\ngenerating query set of size %lu...\n", num_queries);
-	int still_have_space = 1;
-	if (qf.metadata->noccupied_slots >= qf.metadata->nslots * 0.95) {
-		still_have_space = 0;
-		printf("filter is full; skipping query adaptations\n");
-	}
-
-	uint64_t *query_set = (uint64_t*)calloc(num_queries, sizeof(uint64_t));
-	RAND_bytes((unsigned char*)query_set, num_queries * sizeof(uint64_t));
-
-	printf("performing queries... 0%%");
 	current_interval = measure_interval;
-	measure_point = num_queries * current_interval;
+	measure_point = num_churns * current_interval;
 	last_point = 0;
-
-	uint64_t fp_count = 0;
+	
+	std::cout << "performing churns... 0" << '%' << std::flush;
 	start_time = clock();
-	for (i = 0; i < num_queries; i++) {
-		j = query_set[i];
+	for (i = 0; i < num_churns; i++) {
+		int r = rand() % num_inserts;
+		qf_remove(&qf, insert_set[r], &ret_hash, &ret_hash_len, QF_KEY_IS_HASH | QF_NO_LOCK);
+		database.erase(insert_set[r]);
+		backing_map.erase(ret_hash | (1ull << ret_hash_len));
+		RAND_bytes((unsigned char*)&(insert_set[r]), sizeof(uint64_t));
+		insert_key(&qf, backing_map, insert_set[r], 1);
+		database.insert(pair_t(insert_set[r], r));
 
-		if (qf_query(&qf, j, &ret_index, &ret_hash, &ret_hash_len, QF_KEY_IS_HASH)) {
-			ordered_map_t::iterator item = database.find(j);
-			if (item == database.end()) {
-				fp_count++;
-				if (still_have_space) {
-					BACKING_MAP_T::iterator orig_key = backing_map.find(ret_hash | (1 << ret_hash_len));
-					ret_hash_len = qf_adapt(&qf, ret_index, orig_key->second, j, &ret_hash, QF_KEY_IS_HASH | QF_NO_LOCK);
-					if (ret_hash_len > 0) {
-						backing_map.erase(orig_key);
-						backing_map.insert(std::make_pair(ret_hash | (1 << ret_hash_len), orig_key->second));
-					}
-					else if (ret_hash_len == QF_NO_SPACE) {
-						still_have_space = 0;
-						printf("\rfilter is full after %lu queries\n", i);
-					}
-				}
-			}
-		}
-		if (qf.metadata->noccupied_slots >= measure_point) {
-			printf("\rperforming queries... %f%%           ", current_interval * 100);
+		if (i >= measure_point) {
+			std::cout << "\rperforming churns... " << int(current_interval * 100) << '%' << " - " << (double)(i - last_point) * CLOCKS_PER_SEC / (clock() - interval_time) << " ops/sec" << std::flush;
                         current_interval += measure_interval;
                         last_point = i;
-                        measure_point = nslots * current_interval;
+                        measure_point = num_churns * current_interval;
                         interval_time = clock();
                 }
 
 	}
 	end_time = clock();
-	printf("\rperforming queries... 100%%           \n");
+	std::cout << std::endl;
 
-	printf("time for queries:  %f s\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
-	printf("query throughput:  %f ops/sec\n", (double)num_queries * CLOCKS_PER_SEC / (end_time - start_time));
-
-	printf("false positive rate: %f%%\n", 100. * fp_count / num_queries);
+	printf("time for churns:   %f s\n", (double)(end_time - start_time));
+	printf("churn throughput:  %f ops/sec\n", (double)num_churns * CLOCKS_PER_SEC / (end_time - start_time));
 }
 
