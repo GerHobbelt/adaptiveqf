@@ -57,9 +57,11 @@ class TwoIndependentMultiplyShift {
   TwoIndependentMultiplyShift() {
     ::std::random_device random;
     for (auto v : {&multiply_, &add_}) {
+      //*v = rand();
       *v = random();
       for (int i = 1; i <= 4; ++i) {
         *v = *v << 32;
+	//*v |= rand();
         *v |= random();
       }
     }
